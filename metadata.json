@@ -1,0 +1,6 @@
+{
+  "name": "Cloud Intrusion Forensics & Attack Reconstruction",
+  "description": "AI-Driven Cloud Intrusion Forensics, Attack Storytelling, and Timeline Reconstruction Platform using AWS CloudTrail Logs.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
