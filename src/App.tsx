@@ -35,11 +35,30 @@ import {
 } from 'lucide-react';
 import MitreMatrix from './components/MitreMatrix';
 import AttackGraph from './components/AttackGraph';
+import LoginScreen from './components/LoginScreen';
+import { generatePDFReport } from './utils/pdfGenerator';
 import { CloudTrailEvent, Scenario, MisconfigFinding, ThreatIntelRecord, EvidenceArtifact } from './types';
 
 export default function App() {
   // Navigation tabs
   const [activeTab, setActiveTab] = useState<'dashboard' | 'explorer' | 'timeline' | 'graph' | 'mitre' | 'assistant' | 'evidence' | 'intel' | 'risk' | 'misconfig' | 'soar' | 'reports' | 'research'>('dashboard');
+
+  // Dynamic Authentication states
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => localStorage.getItem('cloudtrace_logged_in') === 'true');
+  const [operatorEmail, setOperatorEmail] = useState<string>(() => localStorage.getItem('cloudtrace_operator_email') || 'operator@cloudtrace.internal');
+
+  const handleLoginSuccess = (email: string) => {
+    localStorage.setItem('cloudtrace_logged_in', 'true');
+    localStorage.setItem('cloudtrace_operator_email', email);
+    setIsLoggedIn(true);
+    setOperatorEmail(email);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('cloudtrace_logged_in');
+    localStorage.removeItem('cloudtrace_operator_email');
+    setIsLoggedIn(false);
+  };
 
   // Application-wide Forensics State
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
@@ -86,6 +105,7 @@ export default function App() {
   const [reportType, setReportType] = useState<string>('Comprehensive Incident Forensics Report');
   const [exportedReport, setExportedReport] = useState<any>(null);
   const [loadingExport, setLoadingExport] = useState<boolean>(false);
+  const [reportPreviewTab, setReportPreviewTab] = useState<'pdf' | 'raw'>('pdf');
 
   // Explore filters
   const [explorerSearch, setExplorerSearch] = useState<string>('');
@@ -406,6 +426,10 @@ export default function App() {
     return searchMatch && catMatch && riskMatch;
   }) || [];
 
+  if (!isLoggedIn) {
+    return <LoginScreen onLoginSuccess={handleLoginSuccess} />;
+  }
+
   return (
     <div className="min-h-screen bg-[#0A0A0A] text-[#E5E5E5] flex flex-col font-sans selection:bg-cyan-500/20 selection:text-cyan-400">
       
@@ -413,21 +437,35 @@ export default function App() {
       <header className="bg-[#0F0F0F] border-b border-[#262626] px-6 py-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 sticky top-0 z-50">
         <div className="flex items-center gap-3">
           <div className="bg-gradient-to-br from-cyan-500 to-blue-600 p-2.5 rounded-lg shadow-lg shadow-cyan-500/20">
-            <ShieldAlert className="w-6 h-6 text-white" />
+            <Activity className="w-6 h-6 text-white" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-[9px] font-mono tracking-widest text-cyan-400 uppercase border border-cyan-500/30 px-1 rounded bg-cyan-500/10">Aether Cloud Network</span>
+              <span className="text-[9px] font-mono tracking-widest text-cyan-400 uppercase border border-cyan-500/30 px-1 rounded bg-cyan-500/10">CloudTrace Engine</span>
               <span className="text-[9px] font-mono text-gray-500">v2.4.0-STABLE</span>
             </div>
             <h1 className="text-lg font-sans font-bold tracking-tight text-white flex items-center gap-2">
-              AegisForensics <span className="text-gray-500 font-normal">| Aegis Cloud Forensics platform</span>
+              CloudTrace <span className="text-gray-500 font-normal">| Intelligent Cloud Intrusion Forensics & Attack Reconstruction</span>
             </h1>
           </div>
         </div>
 
         {/* Global scenario contextual switch (Module 1/2) */}
         <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+          {/* SECURE OPERATOR HUD */}
+          <div className="flex items-center gap-2 bg-[#101010] border border-[#212121] rounded-lg px-3 py-2 text-xs text-gray-300">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+            <span className="font-mono text-[10px] text-gray-500 font-bold tracking-wider hidden md:inline">OP:</span>
+            <span className="font-mono text-[10.5px] font-bold text-gray-300 truncate max-w-[130px] sm:max-w-[160px]" title={operatorEmail}>{operatorEmail}</span>
+            <button
+              onClick={handleLogout}
+              title="Close secure console and disconnect"
+              className="ml-1.5 p-1 bg-[#141414] hover:bg-[#1f1f1f] border border-[#262626] rounded text-red-400 hover:text-red-300 transition-colors cursor-pointer"
+            >
+              <Lock className="w-3 h-3" />
+            </button>
+          </div>
+
           <div className="flex items-center gap-2 bg-[#141414] border border-[#262626] text-xs rounded-lg px-3 py-2 w-full sm:w-auto justify-between sm:justify-start">
             <span className="text-gray-500">Active Pipeline Case:</span>
             {loadingScenarios ? (
@@ -1287,7 +1325,7 @@ export default function App() {
 
                     <div className="text-xs text-gray-300 flex flex-col gap-4 leading-relaxed">
                       <p>
-                        AegisForensics evaluates CloudTrail alerts through a hybrid <b>Isolation Forest</b> and <b>Temporal Graph Neural Network</b> model. Standalone heuristics measure API caller rarity, while temporal sequencing flags multi-stage attempts to impair cloud defense systems or execute massive S3 bucket object downloads.
+                        CloudTrace evaluates CloudTrail alerts through a hybrid <b>Isolation Forest</b> and <b>Temporal Graph Neural Network</b> model. Standalone heuristics measure API caller rarity, while temporal sequencing flags multi-stage attempts to impair cloud defense systems or execute massive S3 bucket object downloads.
                       </p>
                       
                       <div className="bg-[#0A0A0A] p-4 border border-[#262626] rounded-lg">
@@ -1731,35 +1769,199 @@ export default function App() {
                   </div>
 
                   {/* Document preview panel */}
-                  <div className="md:col-span-2 bg-[#0F0F0F] border border-[#262626] p-5 rounded-lg">
+                  <div className="md:col-span-2 bg-[#0F0F0F] border border-[#262626] p-5 rounded-lg flex flex-col gap-4">
                     {exportedReport ? (
-                      <div>
-                        <div className="flex justify-between items-center pb-3 border-b border-[#262626] mb-4">
+                      <div className="flex flex-col gap-4">
+                        <div className="flex flex-col sm:flex-row justify-between sm:items-center pb-3 border-b border-[#262626] gap-3">
                           <div>
-                            <span className="text-[10px] font-mono text-cyan-400 uppercase font-bold tracking-wide">Encrypted Document Compiled</span>
-                            <h4 className="text-xs font-mono text-white mt-1 font-bold">{exportedReport.fileName}</h4>
+                            <span className="text-[10px] font-mono text-cyan-400 uppercase font-bold tracking-wide">Encrypted Audit Dossier Formulated</span>
+                            <h4 className="text-xs font-mono text-white mt-1 font-bold">{exportedReport.fileName.replace('.txt', '.pdf')}</h4>
                           </div>
-                          <button 
-                            onClick={() => {
-                              const blob = new Blob([exportedReport.content], { type: 'text/plain' });
-                              const url = URL.createObjectURL(blob);
-                              const link = document.createElement('a');
-                              link.href = url;
-                              link.download = exportedReport.fileName;
-                              link.click();
-                            }}
-                            className="bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 border border-cyan-500/20 px-3 py-1.5 rounded text-xs flex items-center gap-1 font-mono font-bold tracking-wide transition-all"
-                          >
-                            <FileDown className="w-3.5 h-3.5" /> Download Report
-                          </button>
+                          
+                          <div className="flex flex-wrap items-center gap-2">
+                            {/* Toggle format tabs */}
+                            <div className="flex bg-black border border-[#262626] rounded p-1 text-[10px] font-mono">
+                              <button 
+                                onClick={() => setReportPreviewTab('pdf')}
+                                className={`px-2 py-1 rounded cursor-pointer transition-colors ${reportPreviewTab === 'pdf' ? 'bg-[#1a1a1a] text-cyan-400 font-bold' : 'text-gray-500 hover:text-gray-300'}`}
+                              >
+                                PDF PRESENTATION
+                              </button>
+                              <button 
+                                onClick={() => setReportPreviewTab('raw')}
+                                className={`px-2 py-1 rounded cursor-pointer transition-colors ${reportPreviewTab === 'raw' ? 'bg-[#1a1a1a] text-cyan-400 font-bold' : 'text-gray-500 hover:text-gray-300'}`}
+                              >
+                                RAW PLAINTEXT
+                              </button>
+                            </div>
+                          </div>
                         </div>
 
-                        <div className="bg-[#0A0A0A] p-4 border border-[#262626] rounded max-h-[300px] overflow-y-auto">
-                          <pre className="text-[10px] text-gray-400 font-mono leading-relaxed whitespace-pre font-sans">{exportedReport.content}</pre>
-                        </div>
+                        {/* Layout switcher */}
+                        {reportPreviewTab === 'pdf' ? (
+                          <div className="flex flex-col gap-3">
+                            <div className="flex justify-between items-center bg-[#101010] border border-[#222] p-3 rounded-lg text-xs">
+                              <span className="text-gray-400 font-sans">
+                                Professional multi-paging assurance vector format ready for board audit.
+                              </span>
+                              <button 
+                                onClick={() => generatePDFReport(activeScenario, reportType, operatorEmail)}
+                                className="bg-cyan-500 hover:bg-cyan-400 text-black px-4 py-2 rounded font-sans font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-md"
+                              >
+                                <FileDown className="w-4 h-4 text-black shrink-0" /> Download Formal PDF
+                              </button>
+                            </div>
+
+                            {/* PAPER SHEET MOCKUP */}
+                            <div className="bg-[#FFFFFF] text-[#0F172A] p-6 sm:p-8 rounded-lg shadow-2xl border border-gray-200 font-sans text-left max-h-[480px] overflow-y-auto relative selection:bg-cyan-100">
+                              {/* Top accent badge */}
+                              <div className="absolute top-0 left-0 right-0 h-2.5 bg-[#0F172A]" />
+                              <div className="absolute top-0 left-12 w-16 h-2.5 bg-cyan-500" />
+                              
+                              <div className="flex justify-between items-start mb-6">
+                                <div>
+                                  <span className="text-[9px] font-bold text-cyan-600 tracking-wider font-mono">CLOUDTRACE AUDIT DIVISION</span>
+                                  <h3 className="text-xl font-extrabold text-[#0F172A] leading-tight tracking-tight mt-0.5">INCIDENT FORENSIC DOSSIER</h3>
+                                  <p className="text-[10px] text-gray-500 uppercase font-mono mt-0.5 font-bold">{reportType}</p>
+                                </div>
+                                <div className="text-right">
+                                  <span className="inline-block bg-red-100 border border-red-200 text-red-700 font-bold text-[9px] px-2 py-1.5 rounded tracking-wide font-mono">
+                                    CLASSIFIED // SOC-EYES-ONLY
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Horizontal ruler divider */}
+                              <hr className="border-gray-200 my-4" />
+
+                              {/* METADATA GRID */}
+                              <div className="grid grid-cols-2 gap-4 bg-gray-50 border border-gray-100 p-4 rounded mb-6 text-xs font-sans">
+                                <div>
+                                  <p className="text-[9px] text-gray-400 font-bold uppercase tracking-wider font-mono">CASE ID REFERENCE:</p>
+                                  <p className="font-mono text-[11px] font-bold text-[#0F172A]">CASE-CT-{activeScenario.id.toUpperCase()}</p>
+                                </div>
+                                <div>
+                                  <p className="text-[9px] text-gray-400 font-bold uppercase tracking-wider font-mono">COMPILATION DATE (UTC):</p>
+                                  <p className="font-mono text-[11px] text-gray-700 font-medium">{new Date().toUTCString()}</p>
+                                </div>
+                                <div>
+                                  <p className="text-[9px] text-gray-400 font-bold uppercase tracking-wider font-mono">TARGET ACCOUNT ENCLAVE:</p>
+                                  <p className="font-mono text-[11px] font-bold text-dashed underline decoration-cyan-500">{activeScenario.targetAccount}</p>
+                                </div>
+                                <div>
+                                  <p className="text-[9px] text-gray-400 font-bold uppercase tracking-wider font-mono">ASSIGNED AUDIT EXPERT:</p>
+                                  <p className="font-sans text-[11px] text-gray-700 font-bold">{operatorEmail}</p>
+                                </div>
+                                <div className="col-span-2">
+                                  <p className="text-[9px] text-gray-400 font-bold uppercase tracking-wider font-mono">CASE DANGER LEVEL:</p>
+                                  <span className={`inline-flex items-center gap-1.5 font-bold text-[10.5px] font-mono mt-0.5 ${
+                                    activeScenario.severity === 'Critical' ? 'text-red-600' : activeScenario.severity === 'High' ? 'text-orange-600' : 'text-yellow-600'
+                                  }`}>
+                                    <span className={`w-1.5 h-1.5 rounded-full ${
+                                      activeScenario.severity === 'Critical' ? 'bg-red-600' : activeScenario.severity === 'High' ? 'bg-orange-600' : 'bg-yellow-600'
+                                    }`} />
+                                    {activeScenario.severity.toUpperCase()} AUDIT ALERT
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* EXECUTIVE EXPOSITION */}
+                              <div className="mb-6">
+                                <h4 className="text-[11px] font-extrabold text-[#0F172A] tracking-wider uppercase font-mono mb-2">1.0 EXECUTIVE SUMMATION</h4>
+                                <p className="text-xs text-gray-600 leading-relaxed text-justify mb-2">{activeScenario.summary}</p>
+                                <p className="text-xs text-gray-600 leading-relaxed text-justify">{activeScenario.description}</p>
+                              </div>
+
+                              {/* DETECTED THREAT GROUP */}
+                              <div className="mb-6 p-3 bg-cyan-50/50 border border-cyan-100 rounded-lg">
+                                <h4 className="text-[10px] font-extrabold text-cyan-800 tracking-wider uppercase font-mono mb-1.5">2.0 VULNERABILITY INTEL CLASSIFICATION</h4>
+                                <div className="text-xs space-y-1">
+                                  <p className="text-gray-600"><strong className="text-gray-800">Direct Threat Vector:</strong> {activeScenario.insights.attackVector}</p>
+                                  <p className="text-gray-600"><strong className="text-gray-800">Suspected Campaign Group:</strong> {activeScenario.insights.threatActor}</p>
+                                  <p className="text-gray-600"><strong className="text-gray-800">Remediation Policy:</strong> {activeScenario.insights.mitigation}</p>
+                                </div>
+                              </div>
+
+                              {/* DATA TABLE TIMELINE */}
+                              <div className="mb-6">
+                                <h4 className="text-[11px] font-extrabold text-[#0F172A] tracking-wider uppercase font-mono mb-3">3.0 CHRONOLOGICAL TAMPER EVIDENCE TIMELINE</h4>
+                                <div className="border border-gray-200 rounded overflow-hidden">
+                                  <table className="w-full text-left text-[10px] border-collapse">
+                                    <thead>
+                                      <tr className="bg-slate-800 text-white font-mono text-[9px] uppercase tracking-wider">
+                                        <th className="p-2 font-bold">Time</th>
+                                        <th className="p-2 font-bold">API Action</th>
+                                        <th className="p-2 font-bold">IP Source</th>
+                                        <th className="p-2 font-bold text-right font-mono">Risk</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100">
+                                      {activeScenario.timeline.map((event, idx) => (
+                                        <tr key={idx} className="hover:bg-slate-50 transition-colors">
+                                          <td className="p-2 font-mono text-gray-500 whitespace-nowrap">{event.eventTime.substring(11, 19)}</td>
+                                          <td className="p-2">
+                                            <div className="font-bold text-slate-800 font-mono text-[9px]">{event.eventName}</div>
+                                            <div className="text-[8px] text-gray-400 font-mono">{event.eventSource}</div>
+                                          </td>
+                                          <td className="p-2 font-mono text-gray-600">{event.sourceIPAddress}</td>
+                                          <td className="p-2 text-right">
+                                            <span className={`font-mono font-bold ${
+                                              event.anomalyScore > 0.75 ? 'text-red-600' : event.anomalyScore > 0.4 ? 'text-orange-600' : 'text-gray-600'
+                                            }`}>
+                                              {(event.anomalyScore * 100).toFixed(0)}%
+                                            </span>
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+
+                              {/* DIGITAL SIGN-OFF ELEMENT */}
+                              <div className="mt-8 pt-4 border-t border-gray-200 flex justify-between items-end text-[10px]">
+                                <div>
+                                  <p className="text-gray-400 font-mono text-[8px] uppercase font-bold tracking-wider">SECURE DIGITAL CO-SIGNATURE</p>
+                                  <p className="font-semibold text-slate-800 mt-1">{operatorEmail}</p>
+                                  <p className="text-gray-400 italic text-[9px] mt-0.5">Authorizing Investigative Agent</p>
+                                </div>
+                                <div className="text-right">
+                                  <div className="inline-block border-2 border-cyan-500 rounded p-1 font-mono text-[8px] font-bold text-cyan-600 tracking-wide uppercase max-w-[170px] select-none">
+                                    ★ AEGIS VERIFIED SECURE SIGN-OFF ★
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col gap-3">
+                            <div className="flex justify-between items-center bg-[#101010] border border-[#222] p-3 rounded-lg text-xs">
+                              <span className="text-gray-400 font-sans">
+                                Standard plaintext raw ASCII layout optimized for command utility screens.
+                              </span>
+                              <button 
+                                onClick={() => {
+                                  const blob = new Blob([exportedReport.content], { type: 'text/plain' });
+                                  const url = URL.createObjectURL(blob);
+                                  const link = document.createElement('a');
+                                  link.href = url;
+                                  link.download = exportedReport.fileName;
+                                  link.click();
+                                }}
+                                className="bg-[#1a1a1a] hover:bg-[#252525] text-[#ccc] border border-[#333] px-3 py-1.5 rounded text-xs flex items-center gap-1 font-mono font-bold transition-all cursor-pointer"
+                              >
+                                <FileDown className="w-3.5 h-3.5 text-cyan-400" /> Download Plaintext TXT
+                              </button>
+                            </div>
+
+                            <div className="bg-[#0A0A0A] p-4 border border-[#262626] rounded max-h-[440px] overflow-y-auto">
+                              <pre className="text-[10px] text-gray-400 font-mono leading-relaxed whitespace-pre font-sans">{exportedReport.content}</pre>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ) : (
-                      <div className="text-center py-16 text-gray-500 text-xs">
+                      <div className="text-center py-24 text-gray-500 text-xs">
                         <FileText className="w-12 h-12 text-[#262626] mx-auto mb-3" />
                         Configure report parameters and compile documents to prepare legal disclosures, SOC handovers, and auditing certificates.
                       </div>
@@ -1823,7 +2025,7 @@ export default function App() {
 
       {/* Persistent Footer */}
       <footer className="bg-[#141414] border-t border-[#262626] px-6 py-3.5 flex flex-col md:flex-row justify-between items-center text-[10px] text-gray-550 font-mono gap-3 shrink-0">
-        <p>© 2026 AegisForensics Research. Licensed under Apache-2.0.</p>
+        <p>© 2026 CloudTrace Research. Licensed under Apache-2.0.</p>
         <div className="flex gap-4">
           <span>Active Session ID: <b className="text-gray-400">ec016513-3ea9</b></span>
           <span>Target Platform Ingress: <b className="text-cyan-400 font-bold">ONLINE</b></span>

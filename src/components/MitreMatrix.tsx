@@ -5,6 +5,7 @@
 
 import React from 'react';
 import { CloudTrailEvent } from '../types';
+import { Download } from 'lucide-react';
 
 interface MitreMatrixProps {
   timeline: CloudTrailEvent[];
@@ -82,22 +83,78 @@ export default function MitreMatrix({ timeline }: MitreMatrixProps) {
   // Helper to check if a technique is active in the current timeline
   const activeTechniqueIDs = timeline.map(e => e.mitreID).filter(Boolean);
 
+  const downloadMitreCSV = () => {
+    const headers = ["Tactic", "Technique ID", "Technique Name", "Description", "Is Active", "Trigger Count", "Triggering Actions"];
+    const rows: any[] = [];
+    
+    MITRE_CLUSTERS.forEach(cluster => {
+      cluster.techniques.forEach(tech => {
+        const isActive = activeTechniqueIDs.includes(tech.id);
+        const triggeringEvents = timeline.filter(e => e.mitreID === tech.id);
+        const triggerCount = triggeringEvents.length;
+        const triggerApis = triggeringEvents.map(e => e.eventName).join("; ");
+        
+        rows.push([
+          cluster.tactic,
+          tech.id,
+          tech.name,
+          tech.desc,
+          isActive ? "TRUE" : "FALSE",
+          triggerCount,
+          triggerApis
+        ]);
+      });
+    });
+
+    const escapeCsvCell = (cell: any) => {
+      const stringified = String(cell);
+      if (stringified.includes(",") || stringified.includes('"') || stringified.includes("\n")) {
+        return `"${stringified.replace(/"/g, '""')}"`;
+      }
+      return stringified;
+    };
+
+    const csvContent = [
+      headers.map(escapeCsvCell).join(","),
+      ...rows.map(row => row.map(escapeCsvCell).join(","))
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `cloudtrace_mitre_mapping_${new Date().toISOString().substring(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div id="mitre-matrix-view" className="bg-[#141414] border border-[#262626] rounded-xl p-6">
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-6">
         <div>
           <h2 className="text-xl font-sans font-semibold text-white">MITRE ATT&CK® Enterprise & Cloud Navigator</h2>
           <p className="text-xs text-gray-400">Heatmap of tactics mapped dynamically from CloudTrail forensic timelines</p>
         </div>
-        <div className="flex gap-4 text-xs">
+        <div className="flex flex-wrap items-center gap-4 text-xs">
           <div className="flex items-center gap-1.5 text-red-400">
-            <span className="w-2.5 h-2.5 rounded bg-red-500/20 border border-red-500/35"></span>
+            <span className="w-2.5 h-2.5 rounded bg-red-500/20 border border-red-500/35 animate-pulse"></span>
             <span>Active Threat Vector</span>
           </div>
           <div className="flex items-center gap-1.5 text-gray-500">
             <span className="w-2.5 h-2.5 rounded bg-[#0A0A0A] border border-[#262626]"></span>
             <span>Inactive Technique</span>
           </div>
+
+          <button
+            onClick={downloadMitreCSV}
+            className="flex items-center gap-1.5 bg-cyan-500/10 hover:bg-cyan-500/15 text-cyan-400 border border-cyan-500/20 px-3 py-1.5 rounded-lg text-xs font-mono font-bold tracking-wide transition-all cursor-pointer"
+            id="download-mitre-csv-btn"
+            title="Download full MITRE ATT&CK Mapping matrix as an offline CSV file"
+          >
+            <Download className="w-3.5 h-3.5 shrink-0" />
+            <span>EXPORT MITRE .CSV</span>
+          </button>
         </div>
       </div>
 
